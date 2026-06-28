@@ -219,7 +219,7 @@ function esc(s) {
   if (!s) return "";
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
-<script src="admin.js?v=2"></script>
+
 let toastTimer;
 function showToast(msg) {
   const el = document.getElementById("toast");
