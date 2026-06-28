@@ -7,7 +7,7 @@
 
 const CONFIG = {
   // Paste your Google Apps Script Web App URL here:
-  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxJdtS3J_gtUQQXht2lHCqV0_jS3Ib-OiOQpq8XGQKI3XPWelIhMFa93Pzw_VV9fUf9/exec",
+  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxd2Z3gQhHAkWNgARb9PXsrDiUoKZtudv0HGWQChaZBV7YGwrBFatTlE62N_37wpzxz/exec",
 
   // Admin PIN (also set this in Google Apps Script props for server-side check)
   ADMIN_PIN: "405",
