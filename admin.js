@@ -181,14 +181,29 @@ async function renderPlayers() {
   }
 
   container.innerHTML = players.map((name, i) => `
-    <div class="lb-row">
+    <div class="lb-row" style="gap:8px">
       <div class="lb-rank">${i+1}</div>
       <div class="lb-name">${esc(name)}</div>
-      <div class="lb-correct">
+      <div class="lb-correct" style="margin-right:4px">
         <div class="lb-pts" style="font-size:1rem">${playerPickCounts[name] || 0}</div>
         <div class="lb-pts-label">picks made</div>
       </div>
+      <button class="btn-sm btn-delete" onclick="deletePlayer('${esc(name)}')" style="background:#3d1010;color:#e83e3e;flex-shrink:0">🗑 Delete</button>
     </div>`).join("");
+}
+
+// ── DELETE PLAYER ────────────────────────────────────────────
+async function deletePlayer(name) {
+  if (!confirm(\`Delete \${name} and ALL their picks? This cannot be undone.\`)) return;
+  try {
+    const res = await adminFetch({ action:"deletePlayer", pin:CONFIG.ADMIN_PIN, player:name });
+    if (!res.success) throw new Error(res.error || "Failed");
+    showToast(\`🗑 \${name} deleted\`);
+    await loadAdminData();
+    renderPlayers();
+  } catch(e) {
+    showToast("⚠️ " + e.message);
+  }
 }
 
 // ── HELPERS ─────────────────────────────────────────────────
