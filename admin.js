@@ -194,11 +194,11 @@ async function renderPlayers() {
 
 // ── DELETE PLAYER ────────────────────────────────────────────
 async function deletePlayer(name) {
-  if (!confirm(\`Delete \${name} and ALL their picks? This cannot be undone.\`)) return;
+  if (!confirm("Delete " + name + " and ALL their picks? This cannot be undone.")) return;
   try {
     const res = await adminFetch({ action:"deletePlayer", pin:CONFIG.ADMIN_PIN, player:name });
     if (!res.success) throw new Error(res.error || "Failed");
-    showToast(\`🗑 \${name} deleted\`);
+    showToast("🗑 " + name + " deleted");
     await loadAdminData();
     renderPlayers();
   } catch(e) {
