@@ -1,25 +1,22 @@
-// ── app.js ── Player-facing logic ──────────────────────────
+// ── app.js ── Bracket Pick'em Player Logic ──────────────────
 
-// ── STATE ──────────────────────────────────────────────────
 let playerName = localStorage.getItem("wcPickem_name") || "";
 let playerPin  = localStorage.getItem("wcPickem_pin")  || "";
-let games      = [];
-let myPicks    = {};
+let bracketData = null; // { matches, locked, results }
+let myPicks = {};       // { matchId: teamName }
+let savingQueue = {};   // debounce saves
 
 // ── INIT ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
-  setupAuthModal();
-
+  setupAuth();
   if (playerName && playerPin) {
-    showPlayerBanner(playerName);
-    loadGames();
+    showBanner();
+    loadBracket();
   } else {
-    showModal("authModal");
+    document.getElementById("authModal").classList.remove("hidden");
   }
-
-  document.querySelector('[data-tab="leaderboard"]')
-    .addEventListener("click", loadLeaderboard);
+  document.querySelector('[data-tab="leaderboard"]').addEventListener("click", loadLeaderboard);
 });
 
 // ── TABS ────────────────────────────────────────────────────
@@ -34,268 +31,311 @@ function setupTabs() {
   });
 }
 
-// ── AUTH MODAL ──────────────────────────────────────────────
-function setupAuthModal() {
-  // Step 1: name
-  const nameInput  = document.getElementById("playerNameInput");
-  const nameBtn    = document.getElementById("submitName");
-  const pinSection = document.getElementById("pinSection");
-  const pinInput   = document.getElementById("playerPinInput");
-  const pinLabel   = document.getElementById("pinLabel");
-  const pinBtn     = document.getElementById("submitPin");
-  const backBtn    = document.getElementById("backToName");
+// ── AUTH ────────────────────────────────────────────────────
+function setupAuth() {
+  const nameInput = document.getElementById("playerNameInput");
+  const pinInput  = document.getElementById("playerPinInput");
+  let pending = "";
 
-  let pendingName = "";
-
-  nameInput.value = playerName;
-
-  const goToPin = () => {
+  document.getElementById("submitNameBtn").addEventListener("click", () => {
     const name = nameInput.value.trim();
-    if (!name) { showToast("Enter your name first!"); return; }
-    pendingName = name;
-    pinLabel.textContent = `Choose a 4-digit PIN for "${name}" — you'll need it every time you log in.`;
-    pinSection.classList.remove("hidden");
-    nameInput.closest(".name-section").classList.add("hidden");
+    if (!name) { showToast("Enter your name!"); return; }
+    pending = name;
+    document.getElementById("pinLabel").textContent =
+      `${name} — set a 4-digit PIN (new players) or enter your existing PIN.`;
+    document.getElementById("nameSection").classList.add("hidden");
+    document.getElementById("pinSection").classList.remove("hidden");
     pinInput.value = "";
     pinInput.focus();
-  };
-
-  const submitAuth = async () => {
-    const pin = pinInput.value.trim();
-    if (!/^\d{4}$/.test(pin)) { showToast("PIN must be exactly 4 digits"); return; }
-
-    pinBtn.disabled = true;
-    pinBtn.textContent = "Checking…";
-
-    try {
-      const res = await apiFetch({ action: "registerOrLogin", player: pendingName, pin });
-      if (!res.success) {
-        showToast("❌ " + (res.error || "Wrong PIN"));
-        pinBtn.disabled = false;
-        pinBtn.textContent = "Enter →";
-        return;
-      }
-
-      // Save to localStorage
-      playerName = pendingName;
-      playerPin  = pin;
-      localStorage.setItem("wcPickem_name", playerName);
-      localStorage.setItem("wcPickem_pin",  playerPin);
-
-      hideModal("authModal");
-      showPlayerBanner(playerName);
-      if (res.isNew) showToast(`Welcome, ${playerName}! PIN set ✅`);
-      else           showToast(`Welcome back, ${playerName}! ✅`);
-      loadGames();
-    } catch (err) {
-      showToast("⚠️ Network error, try again");
-    } finally {
-      pinBtn.disabled = false;
-      pinBtn.textContent = "Enter →";
-    }
-  };
-
-  nameBtn.addEventListener("click", goToPin);
-  nameInput.addEventListener("keypress", e => { if (e.key === "Enter") goToPin(); });
-  pinBtn.addEventListener("click", submitAuth);
-  pinInput.addEventListener("keypress", e => { if (e.key === "Enter") submitAuth(); });
-
-  backBtn.addEventListener("click", () => {
-    pinSection.classList.add("hidden");
-    nameInput.closest(".name-section").classList.remove("hidden");
-    nameInput.focus();
   });
 
-  // Change name/logout
-  document.getElementById("changeName").addEventListener("click", () => {
-    localStorage.removeItem("wcPickem_name");
-    localStorage.removeItem("wcPickem_pin");
+  nameInput.addEventListener("keypress", e => { if (e.key==="Enter") document.getElementById("submitNameBtn").click(); });
+
+  document.getElementById("submitPinBtn").addEventListener("click", async () => {
+    const pin = pinInput.value.trim();
+    if (!/^\d{4}$/.test(pin)) { showToast("Must be 4 digits"); return; }
+    const btn = document.getElementById("submitPinBtn");
+    btn.disabled = true; btn.textContent = "Checking…";
+    try {
+      const res = await api({ action:"registerOrLogin", player:pending, pin });
+      if (!res.success) { showToast("❌ " + (res.error||"Wrong PIN")); return; }
+      playerName = pending; playerPin = pin;
+      localStorage.setItem("wcPickem_name", playerName);
+      localStorage.setItem("wcPickem_pin",  playerPin);
+      document.getElementById("authModal").classList.add("hidden");
+      showBanner();
+      showToast(res.isNew ? `Welcome, ${playerName}! 🎉` : `Welcome back, ${playerName}!`);
+      loadBracket();
+    } catch(e) { showToast("⚠️ Network error"); }
+    finally { btn.disabled = false; btn.textContent = "Enter →"; }
+  });
+
+  pinInput.addEventListener("keypress", e => { if (e.key==="Enter") document.getElementById("submitPinBtn").click(); });
+
+  document.getElementById("backToNameBtn").addEventListener("click", () => {
+    document.getElementById("pinSection").classList.add("hidden");
+    document.getElementById("nameSection").classList.remove("hidden");
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    localStorage.clear();
     playerName = ""; playerPin = "";
+    document.getElementById("playerBanner").classList.add("hidden");
     nameInput.value = "";
-    pinSection.classList.add("hidden");
-    nameInput.closest(".name-section").classList.remove("hidden");
-    showModal("authModal");
+    document.getElementById("nameSection").classList.remove("hidden");
+    document.getElementById("pinSection").classList.add("hidden");
+    document.getElementById("authModal").classList.remove("hidden");
   });
 }
 
-function showModal(id)  { document.getElementById(id).classList.remove("hidden"); }
-function hideModal(id)  { document.getElementById(id).classList.add("hidden"); }
-
-function showPlayerBanner(name) {
-  document.getElementById("bannerName").textContent = name;
+function showBanner() {
+  document.getElementById("bannerName").textContent = playerName;
   document.getElementById("playerBanner").classList.remove("hidden");
 }
 
-// ── LOAD GAMES ──────────────────────────────────────────────
-async function loadGames() {
-  const container = document.getElementById("gamesList");
-  container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading matches…</p></div>`;
+// ── LOAD BRACKET ────────────────────────────────────────────
+async function loadBracket() {
+  const container = document.getElementById("bracketContainer");
+  container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading your bracket…</p></div>`;
 
   try {
-    const res = await apiFetch({ action: "getGames", player: playerName, pin: playerPin });
-    games   = res.games  || [];
-    myPicks = res.picks  || {};
+    const res = await api({ action:"getBracket", player:playerName, pin:playerPin });
+    bracketData = res;
 
-    if (!games.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><p>No matches scheduled yet.<br>Check back soon!</p></div>`;
-      return;
+    // Build myPicks from returned matches
+    myPicks = {};
+    res.matches.forEach(m => { if (m.myPick) myPicks[m.id] = m.myPick; });
+
+    if (res.locked) {
+      document.getElementById("lockedBanner").classList.remove("hidden");
     }
-    renderGames(container);
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn't load matches.<br>Check your connection.</p></div>`;
+
+    renderBracket(container, res.matches, res.locked, res.results);
+    updateSummary();
+  } catch(e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn't load bracket.<br>Check connection.</p></div>`;
   }
 }
 
-// ── RENDER GAMES ────────────────────────────────────────────
-function renderGames(container) {
-  const rounds = {};
-  games.forEach(g => {
-    if (!rounds[g.round]) rounds[g.round] = [];
-    rounds[g.round].push(g);
+// ── RENDER BRACKET ───────────────────────────────────────────
+function renderBracket(container, matches, locked, results) {
+  const rounds = BRACKET.ROUND_ORDER;
+  let html = "";
+
+  rounds.forEach(round => {
+    const roundMatches = matches.filter(m => m.round === round);
+    const label = BRACKET.ROUND_LABELS[round];
+    const pts   = BRACKET.POINTS[round];
+
+    html += `<div class="round-section">
+      <div class="section-label">${label} <span class="pts-badge">+${pts} pts</span></div>
+      <div class="match-list">`;
+
+    roundMatches.forEach(m => {
+      html += matchCardHTML(m, locked, results);
+    });
+
+    html += `</div></div>`;
   });
 
-  let html = "";
-  for (const [round, list] of Object.entries(rounds)) {
-    html += `<div class="section-label">${esc(round)}</div>`;
-    list.forEach(g => { html += gameCardHTML(g); });
-  }
   container.innerHTML = html;
 
-  container.querySelectorAll(".team-pick-btn[data-game-id]").forEach(btn => {
-    btn.addEventListener("click", () => pickTeam(btn.dataset.gameId, btn.dataset.team));
+  // Attach pick handlers
+  container.querySelectorAll(".pick-btn[data-match-id]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (locked) { showToast("🔒 Bracket is locked!"); return; }
+      makePick(btn.dataset.matchId, btn.dataset.team, matches);
+    });
   });
 }
 
-function gameCardHTML(g) {
-  const isLocked = g.status === "locked" || g.status === "done";
-  const myPick   = myPicks[g.id];
-  const winner   = g.winner;
-  const isDone   = g.status === "done";
-  const dateStr  = g.date ? formatDate(g.date) : "";
+function matchCardHTML(m, locked, results) {
+  const myPick  = myPicks[m.id] || "";
+  const winner  = results[m.id] || "";
+  const isDone  = !!winner;
+  const hasTeams = m.teamA && m.teamB;
 
-  let pickStatusText = "", pickStatusClass = "";
-  if (isDone && myPick && winner) {
-    if (myPick === winner) {
-      pickStatusText  = `✅ Correct! +${CONFIG.POINTS_PER_CORRECT} pts`;
-      pickStatusClass = "correct-pick";
-    } else {
-      pickStatusText  = `❌ Wrong — ${esc(winner)} advanced`;
-      pickStatusClass = "wrong-pick";
-    }
-  } else if (myPick) {
-    pickStatusText  = `Your pick: ${esc(myPick)}`;
-    pickStatusClass = "pending-pick";
-  } else if (isLocked) {
-    pickStatusText = "🔒 Picks closed — no pick made";
-  }
+  const teamACorrect = isDone && winner === m.teamA;
+  const teamBCorrect = isDone && winner === m.teamB;
+  const myPickCorrect = isDone && myPick && myPick === winner;
+  const myPickWrong   = isDone && myPick && myPick !== winner;
 
-  const teamAClass = ["team-pick-btn", myPick === g.teamA ? "selected" : "", isDone && winner === g.teamA ? "winner" : ""].filter(Boolean).join(" ");
-  const teamBClass = ["team-pick-btn", myPick === g.teamB ? "selected" : "", isDone && winner === g.teamB ? "winner" : ""].filter(Boolean).join(" ");
-  const cardClass  = ["game-card", myPick ? "picked" : "", isLocked ? "locked" : "", isDone && myPick && myPick === winner ? "correct" : ""].filter(Boolean).join(" ");
+  const cardClass = ["match-card",
+    myPick ? "picked" : "",
+    myPickCorrect ? "correct" : "",
+    myPickWrong ? "wrong" : "",
+    !hasTeams ? "pending" : "",
+  ].filter(Boolean).join(" ");
+
+  const teamAClass = ["pick-btn",
+    myPick === m.teamA ? "selected" : "",
+    teamACorrect ? "winner" : "",
+    isDone && winner !== m.teamA && myPick === m.teamA ? "loser" : "",
+    !hasTeams || locked ? "disabled" : "",
+  ].filter(Boolean).join(" ");
+
+  const teamBClass = ["pick-btn",
+    myPick === m.teamB ? "selected" : "",
+    teamBCorrect ? "winner" : "",
+    isDone && winner !== m.teamB && myPick === m.teamB ? "loser" : "",
+    !hasTeams || locked ? "disabled" : "",
+  ].filter(Boolean).join(" ");
+
+  let statusText = "";
+  if (myPickCorrect)      statusText = `✅ +${BRACKET.POINTS[m.round]} pts`;
+  else if (myPickWrong)   statusText = `❌ ${esc(winner)} advanced`;
+  else if (myPick)        statusText = `Your pick: ${esc(myPick)}`;
+  else if (!hasTeams)     statusText = "Pick the teams above first";
+  else if (locked)        statusText = "🔒 No pick made";
+  else                    statusText = "Tap a team to pick";
+
+  const teamALabel = m.teamA || `Winner of ${m.fromA ? m.fromA.toUpperCase() : "?"}`;
+  const teamBLabel = m.teamB || `Winner of ${m.fromB ? m.fromB.toUpperCase() : "?"}`;
 
   return `
-    <div class="${cardClass}" data-game-id="${esc(g.id)}">
-      <div class="game-meta">
-        <span class="round-badge">${esc(g.round)}</span>
-        <span class="match-date">${dateStr}</span>
-        ${isLocked ? `<span class="locked-badge">🔒 Locked</span>` : ""}
-      </div>
-      <div class="teams-row">
-        <button class="${teamAClass}" data-game-id="${esc(g.id)}" data-team="${esc(g.teamA)}" ${isLocked ? "disabled" : ""}>${esc(g.teamA)}</button>
+    <div class="${cardClass}" data-match="${esc(m.id)}">
+      <div class="match-teams">
+        <button class="${teamAClass}"
+          data-match-id="${esc(m.id)}" data-team="${esc(m.teamA)}"
+          ${!hasTeams || locked ? "disabled" : ""}>
+          ${esc(teamALabel)}
+          ${teamACorrect ? " 🏆" : ""}
+        </button>
         <span class="vs-label">VS</span>
-        <button class="${teamBClass}" data-game-id="${esc(g.id)}" data-team="${esc(g.teamB)}" ${isLocked ? "disabled" : ""}>${esc(g.teamB)}</button>
+        <button class="${teamBClass}"
+          data-match-id="${esc(m.id)}" data-team="${esc(m.teamB)}"
+          ${!hasTeams || locked ? "disabled" : ""}>
+          ${esc(teamBLabel)}
+          ${teamBCorrect ? " 🏆" : ""}
+        </button>
       </div>
-      <div class="pick-status ${pickStatusClass}">${pickStatusText}</div>
+      <div class="pick-status ${myPickCorrect ? 'correct-pick' : myPickWrong ? 'wrong-pick' : myPick ? 'pending-pick' : 'no-pick'}">${statusText}</div>
     </div>`;
 }
 
-// ── PICK A TEAM ─────────────────────────────────────────────
-async function pickTeam(gameId, team) {
-  if (!playerName || !playerPin) { showToast("Please log in first!"); return; }
+// ── MAKE PICK ────────────────────────────────────────────────
+async function makePick(matchId, team, matches) {
+  if (!team) return;
+  if (bracketData?.locked) { showToast("🔒 Bracket is locked!"); return; }
 
-  const game = games.find(g => g.id === gameId);
-  if (!game || game.status === "locked" || game.status === "done") {
-    showToast("🔒 Picks are closed for this match.");
-    return;
-  }
+  const oldPick = myPicks[matchId];
+  if (oldPick === team) return; // no change
 
-  const prev = myPicks[gameId];
-  myPicks[gameId] = team;
-  updateGameCard(gameId);
+  // Cascade: clear downstream picks that depended on old pick
+  if (oldPick) cascadeClear(matchId, oldPick, matches);
 
-  try {
-    const res = await apiFetch({ action: "submitPick", player: playerName, pin: playerPin, gameId, team });
-    if (!res.success) throw new Error(res.error || "Failed");
-    showToast(`✅ Picked ${team}`);
-  } catch (err) {
-    if (prev) myPicks[gameId] = prev; else delete myPicks[gameId];
-    updateGameCard(gameId);
-    showToast("⚠️ Couldn't save pick. Try again.");
+  // Set new pick
+  myPicks[matchId] = team;
+
+  // Cascade new pick forward into next round's teams
+  cascadeForward(matchId, team, matches);
+
+  // Re-render
+  const container = document.getElementById("bracketContainer");
+  renderBracket(container, matches, bracketData?.locked, bracketData?.results || {});
+  updateSummary();
+
+  // Save to server (debounced)
+  clearTimeout(savingQueue[matchId]);
+  savingQueue[matchId] = setTimeout(async () => {
+    try {
+      const res = await api({ action:"submitPick", player:playerName, pin:playerPin, matchId, pick:team });
+      if (!res.success) throw new Error(res.error);
+    } catch(e) {
+      showToast("⚠️ Save failed — check connection");
+    }
+  }, 400);
+
+  showToast(`Picked ${team} ✓`);
+}
+
+// Cascade: when a pick changes, clear all downstream picks that used the old team
+function cascadeClear(matchId, oldTeam, matches) {
+  const m = matches.find(x => x.id === matchId);
+  if (!m || !m.next) return;
+
+  const nextPick = myPicks[m.next];
+  if (nextPick === oldTeam) {
+    delete myPicks[m.next];
+    // Update the match object team slots
+    const nextMatch = matches.find(x => x.id === m.next);
+    if (nextMatch) {
+      if (m.slot === "a") nextMatch.teamA = "";
+      else nextMatch.teamB = "";
+      cascadeClear(m.next, oldTeam, matches);
+    }
   }
 }
 
-function updateGameCard(gameId) {
-  const game = games.find(g => g.id === gameId);
-  if (!game) return;
-  const card = document.querySelector(`.game-card[data-game-id="${gameId}"]`);
-  if (!card) return;
-  card.outerHTML = gameCardHTML(game);
-  const newCard = document.querySelector(`.game-card[data-game-id="${gameId}"]`);
-  if (newCard) {
-    newCard.querySelectorAll(".team-pick-btn").forEach(btn => {
-      btn.addEventListener("click", () => pickTeam(btn.dataset.gameId, btn.dataset.team));
-    });
-  }
+// Cascade: propagate new pick into next round's team slot
+function cascadeForward(matchId, team, matches) {
+  const m = matches.find(x => x.id === matchId);
+  if (!m || !m.next) return;
+  const nextMatch = matches.find(x => x.id === m.next);
+  if (!nextMatch) return;
+  if (m.slot === "a") nextMatch.teamA = team;
+  else nextMatch.teamB = team;
 }
 
-// ── LEADERBOARD ─────────────────────────────────────────────
+// ── PICKS SUMMARY ────────────────────────────────────────────
+function updateSummary() {
+  const total    = BRACKET.ROUND_ORDER.reduce((acc, r) => {
+    return acc + BRACKET.matches.filter(m => m.round === r).length;
+  }, 0);
+  // Use the global BRACKET data
+  const allMatches = BRACKET.matches;
+  const picked = Object.keys(myPicks).filter(id => myPicks[id]).length;
+  const pct = Math.round((picked / 31) * 100);
+
+  const el = document.getElementById("picksSummary");
+  el.classList.remove("hidden");
+  el.innerHTML = `<div class="summary-bar">
+    <span>${picked}/31 picks made</span>
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <span>${pct}%</span>
+  </div>`;
+}
+
+// ── LEADERBOARD ──────────────────────────────────────────────
 async function loadLeaderboard() {
   const container = document.getElementById("leaderboardList");
   if (!container.querySelector(".loading-state")) return;
-  container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>`;
 
   try {
-    const res  = await apiFetch({ action: "getLeaderboard" });
+    const res  = await api({ action:"getLeaderboard" });
     const rows = res.leaderboard || [];
 
     if (!rows.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>No scores yet. Be the first to make picks!</p></div>`;
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>No scores yet!</p></div>`;
       return;
     }
 
     container.innerHTML = rows.map((r, i) => {
-      const rank = i + 1;
-      const isMe = r.player.toLowerCase() === (playerName || "").toLowerCase();
-      const cls  = ["lb-row", isMe ? "me" : "", `top-${rank}`].filter(Boolean).join(" ");
-      const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
+      const rank  = i + 1;
+      const isMe  = r.player.toLowerCase() === playerName.toLowerCase();
+      const medal = rank===1?"🥇":rank===2?"🥈":rank===3?"🥉":rank;
       return `
-        <div class="${cls}">
+        <div class="lb-row ${isMe?"me":""} top-${rank}">
           <div class="lb-rank">${medal}</div>
-          <div class="lb-name">${esc(r.player)}${isMe ? " (you)" : ""}</div>
+          <div class="lb-name">${esc(r.player)}${isMe?" (you)":""}</div>
           <div class="lb-correct">
             <div class="lb-pts">${r.points}</div>
-            <div class="lb-pts-label">PTS · ${r.correct}/${r.total} correct</div>
+            <div class="lb-pts-label">PTS · ${r.correct} correct</div>
           </div>
         </div>`;
     }).join("");
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn't load leaderboard.</p></div>`;
+  } catch(e) {
+    container.innerHTML = `<div class="empty-state"><p>⚠️ Couldn't load leaderboard.</p></div>`;
   }
 }
 
 // ── HELPERS ─────────────────────────────────────────────────
-async function apiFetch(params) {
+async function api(params) {
   const url = new URL(CONFIG.SCRIPT_URL);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
-}
-
-function formatDate(str) {
-  try {
-    return new Date(str).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  } catch { return str; }
 }
 
 function esc(s) {
@@ -309,5 +349,5 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
 }

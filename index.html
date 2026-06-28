@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>World Cup Pick'em 2026</title>
+  <title>Boyz World Cup Pick'em 2026</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -14,57 +14,57 @@
     <div class="header-inner">
       <div class="trophy">🏆</div>
       <div class="header-text">
-        <h1>World Cup Pick'em</h1>
-        <p class="header-sub">FIFA 2026 · Predict. Score. Win.</p>
+        <h1>Boyz Pick'em</h1>
+        <p class="header-sub">FIFA World Cup 2026 · Full Bracket</p>
       </div>
     </div>
     <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="picks">My Picks</button>
+      <button class="tab-btn active" data-tab="bracket">My Bracket</button>
       <button class="tab-btn" data-tab="leaderboard">Leaderboard</button>
     </nav>
   </header>
 
   <div class="player-banner hidden" id="playerBanner">
-    <span>Playing as <strong id="bannerName"></strong></span>
-    <button class="change-btn" id="changeName">Log out</button>
+    <span>🙋 <strong id="bannerName"></strong></span>
+    <button class="change-btn" id="logoutBtn">Log out</button>
+  </div>
+
+  <div class="locked-banner hidden" id="lockedBanner">
+    🔒 Bracket locked — picks are closed. Good luck!
   </div>
 
   <!-- AUTH MODAL -->
   <div class="modal-overlay" id="authModal">
     <div class="modal">
       <div class="modal-trophy">⚽</div>
-      <h2>Welcome</h2>
-
-      <!-- Step 1: Name -->
-      <div class="name-section">
-        <p>Enter your name to get started.<br>You'll set a 4-digit PIN to protect your picks.</p>
-        <input type="text" id="playerNameInput" placeholder="Your name (e.g. Marco)" maxlength="30" autocomplete="off" />
-        <button class="btn-primary" id="submitName">Next →</button>
+      <h2>Boyz Pick'em</h2>
+      <div class="name-section" id="nameSection">
+        <p>Enter your name to fill out your bracket.<br>You'll set a 4-digit PIN to protect your picks.</p>
+        <input type="text" id="playerNameInput" placeholder="Your name" maxlength="30" autocomplete="off" />
+        <button class="btn-primary" id="submitNameBtn">Next →</button>
       </div>
-
-      <!-- Step 2: PIN -->
       <div id="pinSection" class="hidden">
-        <p id="pinLabel">Choose a 4-digit PIN.</p>
-        <input type="password" id="playerPinInput" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" pattern="\d{4}" />
-        <button class="btn-primary" id="submitPin">Enter →</button>
-        <button class="back-link" id="backToName" style="background:none;border:none;cursor:pointer;margin-top:8px">← Back</button>
+        <p id="pinLabel">Set a 4-digit PIN for your account.</p>
+        <input type="password" id="playerPinInput" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" />
+        <button class="btn-primary" id="submitPinBtn">Enter →</button>
+        <button class="text-btn" id="backToNameBtn">← Back</button>
       </div>
     </div>
   </div>
 
-  <!-- PICKS TAB -->
-  <section class="tab-content active" id="tab-picks">
-    <div class="section-label">UPCOMING MATCHES</div>
-    <div id="gamesList" class="games-list">
-      <div class="loading-state"><div class="spinner"></div><p>Loading matches…</p></div>
+  <!-- BRACKET TAB -->
+  <section class="tab-content active" id="tab-bracket">
+    <div id="bracketContainer">
+      <div class="loading-state"><div class="spinner"></div><p>Loading bracket…</p></div>
     </div>
+    <div class="picks-summary hidden" id="picksSummary"></div>
   </section>
 
   <!-- LEADERBOARD TAB -->
   <section class="tab-content" id="tab-leaderboard">
     <div class="section-label">STANDINGS</div>
     <div id="leaderboardList" class="leaderboard-list">
-      <div class="loading-state"><div class="spinner"></div><p>Loading leaderboard…</p></div>
+      <div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>
     </div>
   </section>
 
@@ -75,6 +75,7 @@
   </footer>
 
   <script src="config.js"></script>
+  <script src="bracket-data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
