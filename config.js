@@ -7,10 +7,10 @@
 
 const CONFIG = {
   // Paste your Google Apps Script Web App URL here:
-  SCRIPT_URL: "https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec",
+  SCRIPT_URL: https://script.google.com/macros/s/AKfycbxpPeKSfktzoZWXTN1ajKJzawM1HYWjDlRrnUWLIhq_pV56-Wd44n8hgf6OfC_BQKTr/exec
 
   // Admin PIN (also set this in Google Apps Script props for server-side check)
-  ADMIN_PIN: "1234",
+  ADMIN_PIN: "405",
 
   // Points awarded per correct pick
   POINTS_PER_CORRECT: 3,
