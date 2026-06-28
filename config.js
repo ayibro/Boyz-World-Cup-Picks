@@ -3,3 +3,4 @@ const CONFIG = {
   ADMIN_PIN: "405",
   POINTS_PER_CORRECT: 3,
 };
+ 
