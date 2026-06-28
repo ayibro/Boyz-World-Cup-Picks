@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin · World Cup Pick'em</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body class="admin-body">
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="trophy">⚙️</div>
+      <div class="header-text">
+        <h1>Admin Panel</h1>
+        <p class="header-sub">World Cup Pick'em 2026</p>
+      </div>
+    </div>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="games">Games</button>
+      <button class="tab-btn" data-tab="add-game">Add Game</button>
+      <button class="tab-btn" data-tab="all-picks">All Picks</button>
+    </nav>
+  </header>
+
+  <!-- PIN MODAL -->
+  <div class="modal-overlay" id="pinModal">
+    <div class="modal">
+      <div class="modal-trophy">🔐</div>
+      <h2>Admin Access</h2>
+      <p>Enter your admin PIN to continue.</p>
+      <input type="password" id="pinInput" placeholder="PIN" maxlength="8" inputmode="numeric" />
+      <button class="btn-primary" id="submitPin">Unlock →</button>
+      <a href="index.html" class="back-link">← Back to picks</a>
+    </div>
+  </div>
+
+  <!-- GAMES TAB -->
+  <section class="tab-content active" id="tab-games">
+    <div class="section-label">MANAGE GAMES</div>
+    <div id="adminGamesList" class="games-list admin-games"></div>
+  </section>
+
+  <!-- ADD GAME TAB -->
+  <section class="tab-content" id="tab-add-game">
+    <div class="section-label">ADD NEW GAME</div>
+    <div class="admin-form-card">
+      <div class="form-group">
+        <label>Team A</label>
+        <input type="text" id="teamA" placeholder="e.g. Brazil" maxlength="40" />
+      </div>
+      <div class="form-group">
+        <label>Team B</label>
+        <input type="text" id="teamB" placeholder="e.g. Argentina" maxlength="40" />
+      </div>
+      <div class="form-group">
+        <label>Match Date &amp; Time</label>
+        <input type="datetime-local" id="matchDate" />
+      </div>
+      <div class="form-group">
+        <label>Round / Stage</label>
+        <select id="matchRound">
+          <option value="Group Stage">Group Stage</option>
+          <option value="Round of 32">Round of 32</option>
+          <option value="Round of 16">Round of 16</option>
+          <option value="Quarter-Final">Quarter-Final</option>
+          <option value="Semi-Final">Semi-Final</option>
+          <option value="Third Place">Third Place</option>
+          <option value="Final">Final</option>
+        </select>
+      </div>
+      <button class="btn-primary" id="addGameBtn">Add Game</button>
+    </div>
+  </section>
+
+  <!-- ALL PICKS TAB -->
+  <section class="tab-content" id="tab-all-picks">
+    <div class="section-label">ALL PICKS</div>
+    <div id="allPicksContainer"></div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
