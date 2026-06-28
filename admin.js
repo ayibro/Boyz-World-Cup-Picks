@@ -1,10 +1,33 @@
 // ── admin.js ── Admin-panel logic ──────────────────────────
 
+// ── BULK IMPORT DATA ────────────────────────────────────────
+const ROUND_OF_32 = [
+  { teamA: "South Africa",        teamB: "Canada",               date: "2026-06-28T15:00", round: "Round of 32" },
+  { teamA: "Brazil",              teamB: "Japan",                date: "2026-06-29T13:00", round: "Round of 32" },
+  { teamA: "Germany",             teamB: "Paraguay",             date: "2026-06-29T16:30", round: "Round of 32" },
+  { teamA: "Netherlands",         teamB: "Morocco",              date: "2026-06-29T21:00", round: "Round of 32" },
+  { teamA: "Ivory Coast",         teamB: "Norway",               date: "2026-06-30T13:00", round: "Round of 32" },
+  { teamA: "France",              teamB: "Sweden",               date: "2026-06-30T17:00", round: "Round of 32" },
+  { teamA: "Mexico",              teamB: "Ecuador",              date: "2026-07-01T02:00", round: "Round of 32" },
+  { teamA: "England",             teamB: "DR Congo",             date: "2026-07-01T12:00", round: "Round of 32" },
+  { teamA: "Belgium",             teamB: "Senegal",              date: "2026-07-01T16:00", round: "Round of 32" },
+  { teamA: "USA",                 teamB: "Bosnia and Herzegovina",date: "2026-07-01T20:00", round: "Round of 32" },
+  { teamA: "Spain",               teamB: "Austria",              date: "2026-07-02T15:00", round: "Round of 32" },
+  { teamA: "Portugal",            teamB: "Croatia",              date: "2026-07-02T19:00", round: "Round of 32" },
+  { teamA: "Switzerland",         teamB: "Algeria",              date: "2026-07-02T23:00", round: "Round of 32" },
+  { teamA: "Australia",           teamB: "Egypt",                date: "2026-07-03T14:00", round: "Round of 32" },
+  { teamA: "Argentina",           teamB: "Cape Verde",           date: "2026-07-03T18:00", round: "Round of 32" },
+  { teamA: "Colombia",            teamB: "Ghana",                date: "2026-07-03T21:30", round: "Round of 32" },
+];
+
+let bulkGames = ROUND_OF_32.map(g => ({ ...g }));
+
 let adminUnlocked = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   setupPinModal();
   setupTabs();
+  renderBulkTable();
 });
 
 // ── PIN ─────────────────────────────────────────────────────
@@ -44,11 +67,20 @@ function setupTabs() {
       document.getElementById(tabId).classList.add("active");
 
       if (btn.dataset.tab === "all-picks") loadAllPicks();
+      if (btn.dataset.tab === "bulk-import") renderBulkTable();
     });
   });
 
   // Add-game button
   document.getElementById("addGameBtn").addEventListener("click", addGame);
+
+  // Bulk import buttons
+  document.getElementById("importAllBtn").addEventListener("click", importAllGames);
+  document.getElementById("resetBulkBtn").addEventListener("click", () => {
+    bulkGames = ROUND_OF_32.map(g => ({ ...g }));
+    renderBulkTable();
+    showToast("Reset to Round of 32");
+  });
 }
 
 // ── LOAD ADMIN GAMES ────────────────────────────────────────
@@ -252,6 +284,84 @@ async function loadAllPicks() {
     container.innerHTML = html;
   } catch (err) {
     container.innerHTML = `<div class="empty-state"><p>Error loading picks.</p></div>`;
+  }
+}
+
+// ── BULK IMPORT ──────────────────────────────────────────────
+function renderBulkTable() {
+  const tbody = document.getElementById("bulkRows");
+  if (!tbody) return;
+
+  tbody.innerHTML = bulkGames.map((g, i) => `
+    <tr id="bulkRow-${i}">
+      <td style="color:var(--grey-mid)">${i + 1}</td>
+      <td><input class="bulk-input" data-i="${i}" data-f="teamA" value="${esc(g.teamA)}" /></td>
+      <td><input class="bulk-input" data-i="${i}" data-f="teamB" value="${esc(g.teamB)}" /></td>
+      <td><input class="bulk-input" data-i="${i}" data-f="date" type="datetime-local" value="${g.date}" style="min-width:155px" /></td>
+      <td>
+        <select class="bulk-input" data-i="${i}" data-f="round">
+          ${["Round of 32","Round of 16","Quarter-Final","Semi-Final","Third Place","Final"]
+            .map(r => `<option${r===g.round?" selected":""}>${r}</option>`).join("")}
+        </select>
+      </td>
+      <td><button class="btn-sm btn-delete" style="padding:5px 8px" onclick="removeBulkRow(${i})">✕</button></td>
+    </tr>`).join("");
+
+  // Live-edit listeners
+  tbody.querySelectorAll(".bulk-input").forEach(el => {
+    el.addEventListener("change", e => {
+      const i = +e.target.dataset.i;
+      const f =  e.target.dataset.f;
+      bulkGames[i][f] = e.target.value;
+    });
+  });
+
+  // Style inputs inline
+  tbody.querySelectorAll("input.bulk-input, select.bulk-input").forEach(el => {
+    el.style.cssText = "background:var(--pitch-mid);border:1px solid var(--pitch-line);border-radius:6px;color:var(--white);font-size:0.78rem;padding:5px 7px;width:100%;font-family:var(--font-body)";
+  });
+}
+
+function removeBulkRow(i) {
+  bulkGames.splice(i, 1);
+  renderBulkTable();
+}
+
+async function importAllGames() {
+  const btn      = document.getElementById("importAllBtn");
+  const progress = document.getElementById("importProgress");
+  const total    = bulkGames.length;
+  let done = 0, failed = 0;
+
+  btn.disabled = true;
+  btn.textContent = "Importing…";
+
+  for (const g of bulkGames) {
+    if (!g.teamA.trim() || !g.teamB.trim()) { failed++; continue; }
+    try {
+      const res = await adminFetch({
+        action: "addGame", pin: CONFIG.ADMIN_PIN,
+        teamA: g.teamA.trim(), teamB: g.teamB.trim(),
+        date: g.date, round: g.round
+      });
+      if (!res.success) throw new Error(res.error);
+      done++;
+    } catch (err) {
+      failed++;
+    }
+    progress.textContent = `Progress: ${done + failed}/${total} — ${done} added, ${failed} failed`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = "⚡ Import All Games";
+
+  if (failed === 0) {
+    showToast(`✅ All ${done} games imported!`);
+    // Switch to games tab
+    document.querySelector('[data-tab="games"]').click();
+    loadAdminGames();
+  } else {
+    showToast(`⚠️ ${done} imported, ${failed} failed`);
   }
 }
 
