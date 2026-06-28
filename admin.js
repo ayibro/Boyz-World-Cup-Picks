@@ -287,6 +287,37 @@ async function loadAllPicks() {
   }
 }
 
+// ── LOCK / UNLOCK ALL ───────────────────────────────────────
+async function setAllStatus(status) {
+  const label = status === 'locked' ? '🔒 Lock' : '🔓 Unlock';
+  const btnId  = status === 'locked' ? 'lockAllBtn' : 'unlockAllBtn';
+  if (!confirm(label + ' ALL games?')) return;
+
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  btn.textContent = 'Working…';
+
+  try {
+    const res = await adminFetch({ action: 'getGames', player: '_admin_' });
+    const games = (res.games || []).filter(g => g.status !== 'done');
+
+    let done = 0;
+    for (const g of games) {
+      try {
+        await adminFetch({ action: 'setStatus', pin: CONFIG.ADMIN_PIN, gameId: g.id, status });
+        done++;
+      } catch (e) { /* skip */ }
+    }
+    showToast(label + 'ed ' + done + ' games!');
+    loadAdminGames();
+  } catch (err) {
+    showToast('⚠️ Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = status === 'locked' ? '🔒 Lock All Games' : '🔓 Unlock All Games';
+  }
+}
+
 // ── BULK IMPORT ──────────────────────────────────────────────
 function renderBulkTable() {
   const tbody = document.getElementById("bulkRows");

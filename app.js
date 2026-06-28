@@ -2,23 +2,24 @@
 
 // ── STATE ──────────────────────────────────────────────────
 let playerName = localStorage.getItem("wcPickem_name") || "";
+let playerPin  = localStorage.getItem("wcPickem_pin")  || "";
 let games      = [];
-let myPicks    = {}; // { gameId: teamPicked }
+let myPicks    = {};
 
 // ── INIT ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
-  setupNameModal();
+  setupAuthModal();
 
-  if (playerName) {
+  if (playerName && playerPin) {
     showPlayerBanner(playerName);
     loadGames();
   } else {
-    document.getElementById("nameModal").classList.remove("hidden");
+    showModal("authModal");
   }
 
-  // Leaderboard lazy-load when tab clicked
-  document.querySelector('[data-tab="leaderboard"]').addEventListener("click", loadLeaderboard);
+  document.querySelector('[data-tab="leaderboard"]')
+    .addEventListener("click", loadLeaderboard);
 });
 
 // ── TABS ────────────────────────────────────────────────────
@@ -33,32 +34,92 @@ function setupTabs() {
   });
 }
 
-// ── NAME MODAL ──────────────────────────────────────────────
-function setupNameModal() {
-  const modal = document.getElementById("nameModal");
-  const input = document.getElementById("playerNameInput");
-  const btn   = document.getElementById("submitName");
+// ── AUTH MODAL ──────────────────────────────────────────────
+function setupAuthModal() {
+  // Step 1: name
+  const nameInput  = document.getElementById("playerNameInput");
+  const nameBtn    = document.getElementById("submitName");
+  const pinSection = document.getElementById("pinSection");
+  const pinInput   = document.getElementById("playerPinInput");
+  const pinLabel   = document.getElementById("pinLabel");
+  const pinBtn     = document.getElementById("submitPin");
+  const backBtn    = document.getElementById("backToName");
 
-  input.value = playerName;
+  let pendingName = "";
 
-  const submit = () => {
-    const name = input.value.trim();
-    if (!name) { showToast("Please enter your name!"); return; }
-    playerName = name;
-    localStorage.setItem("wcPickem_name", name);
-    modal.classList.add("hidden");
-    showPlayerBanner(name);
-    loadGames();
+  nameInput.value = playerName;
+
+  const goToPin = () => {
+    const name = nameInput.value.trim();
+    if (!name) { showToast("Enter your name first!"); return; }
+    pendingName = name;
+    pinLabel.textContent = `Choose a 4-digit PIN for "${name}" — you'll need it every time you log in.`;
+    pinSection.classList.remove("hidden");
+    nameInput.closest(".name-section").classList.add("hidden");
+    pinInput.value = "";
+    pinInput.focus();
   };
 
-  btn.addEventListener("click", submit);
-  input.addEventListener("keypress", e => { if (e.key === "Enter") submit(); });
+  const submitAuth = async () => {
+    const pin = pinInput.value.trim();
+    if (!/^\d{4}$/.test(pin)) { showToast("PIN must be exactly 4 digits"); return; }
 
+    pinBtn.disabled = true;
+    pinBtn.textContent = "Checking…";
+
+    try {
+      const res = await apiFetch({ action: "registerOrLogin", player: pendingName, pin });
+      if (!res.success) {
+        showToast("❌ " + (res.error || "Wrong PIN"));
+        pinBtn.disabled = false;
+        pinBtn.textContent = "Enter →";
+        return;
+      }
+
+      // Save to localStorage
+      playerName = pendingName;
+      playerPin  = pin;
+      localStorage.setItem("wcPickem_name", playerName);
+      localStorage.setItem("wcPickem_pin",  playerPin);
+
+      hideModal("authModal");
+      showPlayerBanner(playerName);
+      if (res.isNew) showToast(`Welcome, ${playerName}! PIN set ✅`);
+      else           showToast(`Welcome back, ${playerName}! ✅`);
+      loadGames();
+    } catch (err) {
+      showToast("⚠️ Network error, try again");
+    } finally {
+      pinBtn.disabled = false;
+      pinBtn.textContent = "Enter →";
+    }
+  };
+
+  nameBtn.addEventListener("click", goToPin);
+  nameInput.addEventListener("keypress", e => { if (e.key === "Enter") goToPin(); });
+  pinBtn.addEventListener("click", submitAuth);
+  pinInput.addEventListener("keypress", e => { if (e.key === "Enter") submitAuth(); });
+
+  backBtn.addEventListener("click", () => {
+    pinSection.classList.add("hidden");
+    nameInput.closest(".name-section").classList.remove("hidden");
+    nameInput.focus();
+  });
+
+  // Change name/logout
   document.getElementById("changeName").addEventListener("click", () => {
-    input.value = playerName;
-    modal.classList.remove("hidden");
+    localStorage.removeItem("wcPickem_name");
+    localStorage.removeItem("wcPickem_pin");
+    playerName = ""; playerPin = "";
+    nameInput.value = "";
+    pinSection.classList.add("hidden");
+    nameInput.closest(".name-section").classList.remove("hidden");
+    showModal("authModal");
   });
 }
+
+function showModal(id)  { document.getElementById(id).classList.remove("hidden"); }
+function hideModal(id)  { document.getElementById(id).classList.add("hidden"); }
 
 function showPlayerBanner(name) {
   document.getElementById("bannerName").textContent = name;
@@ -71,25 +132,22 @@ async function loadGames() {
   container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading matches…</p></div>`;
 
   try {
-    const res  = await apiFetch({ action: "getGames", player: playerName });
-    games      = res.games  || [];
-    myPicks    = res.picks  || {};
+    const res = await apiFetch({ action: "getGames", player: playerName, pin: playerPin });
+    games   = res.games  || [];
+    myPicks = res.picks  || {};
 
     if (!games.length) {
       container.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><p>No matches scheduled yet.<br>Check back soon!</p></div>`;
       return;
     }
-
     renderGames(container);
   } catch (err) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn't load matches.<br>Check your connection and try again.</p></div>`;
-    console.error(err);
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn't load matches.<br>Check your connection.</p></div>`;
   }
 }
 
 // ── RENDER GAMES ────────────────────────────────────────────
 function renderGames(container) {
-  // Group by round
   const rounds = {};
   games.forEach(g => {
     if (!rounds[g.round]) rounds[g.round] = [];
@@ -103,55 +161,37 @@ function renderGames(container) {
   }
   container.innerHTML = html;
 
-  // Attach pick handlers
   container.querySelectorAll(".team-pick-btn[data-game-id]").forEach(btn => {
     btn.addEventListener("click", () => pickTeam(btn.dataset.gameId, btn.dataset.team));
   });
 }
 
 function gameCardHTML(g) {
-  const isLocked  = g.status === "locked" || g.status === "done";
-  const myPick    = myPicks[g.id];
-  const winner    = g.winner;
-  const dateStr   = g.date ? formatDate(g.date) : "";
-  const isDone    = g.status === "done";
+  const isLocked = g.status === "locked" || g.status === "done";
+  const myPick   = myPicks[g.id];
+  const winner   = g.winner;
+  const isDone   = g.status === "done";
+  const dateStr  = g.date ? formatDate(g.date) : "";
 
-  let pickStatusText = "";
-  let pickStatusClass = "";
-
+  let pickStatusText = "", pickStatusClass = "";
   if (isDone && myPick && winner) {
     if (myPick === winner) {
       pickStatusText  = `✅ Correct! +${CONFIG.POINTS_PER_CORRECT} pts`;
       pickStatusClass = "correct-pick";
     } else {
-      pickStatusText  = `❌ Wrong — ${esc(winner)} won`;
+      pickStatusText  = `❌ Wrong — ${esc(winner)} advanced`;
       pickStatusClass = "wrong-pick";
     }
   } else if (myPick) {
     pickStatusText  = `Your pick: ${esc(myPick)}`;
     pickStatusClass = "pending-pick";
   } else if (isLocked) {
-    pickStatusText  = "🔒 Picks closed";
+    pickStatusText = "🔒 Picks closed — no pick made";
   }
 
-  const teamAClass = [
-    "team-pick-btn",
-    myPick === g.teamA ? "selected" : "",
-    isDone && winner === g.teamA ? "winner" : "",
-  ].filter(Boolean).join(" ");
-
-  const teamBClass = [
-    "team-pick-btn",
-    myPick === g.teamB ? "selected" : "",
-    isDone && winner === g.teamB ? "winner" : "",
-  ].filter(Boolean).join(" ");
-
-  const cardClass = [
-    "game-card",
-    myPick ? "picked" : "",
-    isLocked ? "locked" : "",
-    isDone && myPick && winner && myPick === winner ? "correct" : "",
-  ].filter(Boolean).join(" ");
+  const teamAClass = ["team-pick-btn", myPick === g.teamA ? "selected" : "", isDone && winner === g.teamA ? "winner" : ""].filter(Boolean).join(" ");
+  const teamBClass = ["team-pick-btn", myPick === g.teamB ? "selected" : "", isDone && winner === g.teamB ? "winner" : ""].filter(Boolean).join(" ");
+  const cardClass  = ["game-card", myPick ? "picked" : "", isLocked ? "locked" : "", isDone && myPick && myPick === winner ? "correct" : ""].filter(Boolean).join(" ");
 
   return `
     <div class="${cardClass}" data-game-id="${esc(g.id)}">
@@ -161,17 +201,9 @@ function gameCardHTML(g) {
         ${isLocked ? `<span class="locked-badge">🔒 Locked</span>` : ""}
       </div>
       <div class="teams-row">
-        <button class="${teamAClass}"
-          data-game-id="${esc(g.id)}" data-team="${esc(g.teamA)}"
-          ${isLocked ? "disabled" : ""}>
-          ${esc(g.teamA)}
-        </button>
+        <button class="${teamAClass}" data-game-id="${esc(g.id)}" data-team="${esc(g.teamA)}" ${isLocked ? "disabled" : ""}>${esc(g.teamA)}</button>
         <span class="vs-label">VS</span>
-        <button class="${teamBClass}"
-          data-game-id="${esc(g.id)}" data-team="${esc(g.teamB)}"
-          ${isLocked ? "disabled" : ""}>
-          ${esc(g.teamB)}
-        </button>
+        <button class="${teamBClass}" data-game-id="${esc(g.id)}" data-team="${esc(g.teamB)}" ${isLocked ? "disabled" : ""}>${esc(g.teamB)}</button>
       </div>
       <div class="pick-status ${pickStatusClass}">${pickStatusText}</div>
     </div>`;
@@ -179,7 +211,7 @@ function gameCardHTML(g) {
 
 // ── PICK A TEAM ─────────────────────────────────────────────
 async function pickTeam(gameId, team) {
-  if (!playerName) { showToast("Enter your name first!"); return; }
+  if (!playerName || !playerPin) { showToast("Please log in first!"); return; }
 
   const game = games.find(g => g.id === gameId);
   if (!game || game.status === "locked" || game.status === "done") {
@@ -187,17 +219,15 @@ async function pickTeam(gameId, team) {
     return;
   }
 
-  // Optimistic UI
-  const prev  = myPicks[gameId];
+  const prev = myPicks[gameId];
   myPicks[gameId] = team;
   updateGameCard(gameId);
 
   try {
-    const res = await apiFetch({ action: "submitPick", player: playerName, gameId, team });
+    const res = await apiFetch({ action: "submitPick", player: playerName, pin: playerPin, gameId, team });
     if (!res.success) throw new Error(res.error || "Failed");
     showToast(`✅ Picked ${team}`);
   } catch (err) {
-    // Rollback
     if (prev) myPicks[gameId] = prev; else delete myPicks[gameId];
     updateGameCard(gameId);
     showToast("⚠️ Couldn't save pick. Try again.");
@@ -210,7 +240,6 @@ function updateGameCard(gameId) {
   const card = document.querySelector(`.game-card[data-game-id="${gameId}"]`);
   if (!card) return;
   card.outerHTML = gameCardHTML(game);
-  // Re-attach listener for the replaced card
   const newCard = document.querySelector(`.game-card[data-game-id="${gameId}"]`);
   if (newCard) {
     newCard.querySelectorAll(".team-pick-btn").forEach(btn => {
@@ -222,7 +251,7 @@ function updateGameCard(gameId) {
 // ── LEADERBOARD ─────────────────────────────────────────────
 async function loadLeaderboard() {
   const container = document.getElementById("leaderboardList");
-  if (!container.querySelector(".loading-state")) return; // already loaded with real data
+  if (!container.querySelector(".loading-state")) return;
   container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>`;
 
   try {
@@ -230,7 +259,7 @@ async function loadLeaderboard() {
     const rows = res.leaderboard || [];
 
     if (!rows.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>No scores yet.<br>Be the first to make picks!</p></div>`;
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>No scores yet. Be the first to make picks!</p></div>`;
       return;
     }
 
@@ -239,7 +268,6 @@ async function loadLeaderboard() {
       const isMe = r.player.toLowerCase() === (playerName || "").toLowerCase();
       const cls  = ["lb-row", isMe ? "me" : "", `top-${rank}`].filter(Boolean).join(" ");
       const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
-
       return `
         <div class="${cls}">
           <div class="lb-rank">${medal}</div>
@@ -265,10 +293,8 @@ async function apiFetch(params) {
 }
 
 function formatDate(str) {
-  if (!str) return "";
   try {
-    const d = new Date(str);
-    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return new Date(str).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   } catch { return str; }
 }
 

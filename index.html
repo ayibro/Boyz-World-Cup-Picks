@@ -10,7 +10,6 @@
 </head>
 <body>
 
-  <!-- HEADER -->
   <header class="site-header">
     <div class="header-inner">
       <div class="trophy">🏆</div>
@@ -25,20 +24,31 @@
     </nav>
   </header>
 
-  <!-- PLAYER BANNER (shown after name entry) -->
   <div class="player-banner hidden" id="playerBanner">
     <span>Playing as <strong id="bannerName"></strong></span>
-    <button class="change-btn" id="changeName">Change</button>
+    <button class="change-btn" id="changeName">Log out</button>
   </div>
 
-  <!-- NAME ENTRY MODAL -->
-  <div class="modal-overlay" id="nameModal">
+  <!-- AUTH MODAL -->
+  <div class="modal-overlay" id="authModal">
     <div class="modal">
       <div class="modal-trophy">⚽</div>
-      <h2>Enter your name</h2>
-      <p>No account needed — just your name to track your picks.</p>
-      <input type="text" id="playerNameInput" placeholder="Your name (e.g. Marco)" maxlength="30" autocomplete="off" />
-      <button class="btn-primary" id="submitName">Let's Go →</button>
+      <h2>Welcome</h2>
+
+      <!-- Step 1: Name -->
+      <div class="name-section">
+        <p>Enter your name to get started.<br>You'll set a 4-digit PIN to protect your picks.</p>
+        <input type="text" id="playerNameInput" placeholder="Your name (e.g. Marco)" maxlength="30" autocomplete="off" />
+        <button class="btn-primary" id="submitName">Next →</button>
+      </div>
+
+      <!-- Step 2: PIN -->
+      <div id="pinSection" class="hidden">
+        <p id="pinLabel">Choose a 4-digit PIN.</p>
+        <input type="password" id="playerPinInput" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" pattern="\d{4}" />
+        <button class="btn-primary" id="submitPin">Enter →</button>
+        <button class="back-link" id="backToName" style="background:none;border:none;cursor:pointer;margin-top:8px">← Back</button>
+      </div>
     </div>
   </div>
 
@@ -46,10 +56,7 @@
   <section class="tab-content active" id="tab-picks">
     <div class="section-label">UPCOMING MATCHES</div>
     <div id="gamesList" class="games-list">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading matches…</p>
-      </div>
+      <div class="loading-state"><div class="spinner"></div><p>Loading matches…</p></div>
     </div>
   </section>
 
@@ -57,17 +64,12 @@
   <section class="tab-content" id="tab-leaderboard">
     <div class="section-label">STANDINGS</div>
     <div id="leaderboardList" class="leaderboard-list">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading leaderboard…</p>
-      </div>
+      <div class="loading-state"><div class="spinner"></div><p>Loading leaderboard…</p></div>
     </div>
   </section>
 
-  <!-- TOAST NOTIFICATION -->
   <div class="toast" id="toast"></div>
 
-  <!-- FOOTER -->
   <footer class="site-footer">
     <a href="admin.html" class="admin-link">⚙ Admin</a>
   </footer>
