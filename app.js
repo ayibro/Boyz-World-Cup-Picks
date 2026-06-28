@@ -118,12 +118,48 @@ async function loadBracket() {
 }
 
 // ── RENDER BRACKET ───────────────────────────────────────────
-function renderBracket(container, matches, locked, results) {
-  const rounds = BRACKET.ROUND_ORDER;
-  let html = "";
+function renderBracket(container, serverMatches, locked, results) {
+  // Merge server data (picks, real team names) onto full local bracket
+  // Use BRACKET.matches as the source of truth for all 31 matches
+  const serverMap = {};
+  (serverMatches || []).forEach(m => { serverMap[m.id] = m; });
 
-  rounds.forEach(round => {
-    const roundMatches = matches.filter(m => m.round === round);
+  // Build display matches: local structure + server team names + picks cascaded
+  const displayMatches = BRACKET.matches.map(m => ({
+    ...m,
+    teamA:  serverMap[m.id]?.teamA  || m.teamA || "",
+    teamB:  serverMap[m.id]?.teamB  || m.teamB || "",
+    winner: results[m.id] || "",
+    myPick: myPicks[m.id] || "",
+  }));
+
+  // Cascade player's picks forward to populate future round team names
+  displayMatches.forEach(m => {
+    const pick = myPicks[m.id];
+    if (pick && m.next) {
+      const next = displayMatches.find(x => x.id === m.next);
+      if (next) {
+        if (m.slot === "a") next.teamA = pick;
+        else                next.teamB = pick;
+      }
+    }
+  });
+
+  // Also cascade real results forward
+  displayMatches.forEach(m => {
+    const winner = results[m.id];
+    if (winner && m.next) {
+      const next = displayMatches.find(x => x.id === m.next);
+      if (next) {
+        if (m.slot === "a") next.teamA = winner;
+        else                next.teamB = winner;
+      }
+    }
+  });
+
+  let html = "";
+  BRACKET.ROUND_ORDER.forEach(round => {
+    const roundMatches = displayMatches.filter(m => m.round === round);
     const label = BRACKET.ROUND_LABELS[round];
     const pts   = BRACKET.POINTS[round];
 
@@ -140,11 +176,12 @@ function renderBracket(container, matches, locked, results) {
 
   container.innerHTML = html;
 
-  // Attach pick handlers
+  // Attach pick handlers — pass displayMatches for cascade
   container.querySelectorAll(".pick-btn[data-match-id]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (locked) { showToast("🔒 Bracket is locked!"); return; }
-      makePick(btn.dataset.matchId, btn.dataset.team, matches);
+      if (!btn.dataset.team) return;
+      makePick(btn.dataset.matchId, btn.dataset.team, displayMatches);
     });
   });
 }
